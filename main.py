@@ -1,64 +1,38 @@
-import os
 import logging
-import filetype
-from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from openai import OpenAI
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import openai
+import os
 
-# گرفتن توکن‌ها از محیط
+# گرفتن توکن‌ها از متغیر محیطی
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY
 
-# فعال‌سازی لاگ برای دیباگ
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# دستور /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("سلام 👋 من بات هوش مصنوعی تایم‌وین هستم. هر سوالی داری بپرس!")
+    await update.message.reply_text("سلام! من ربات هوش مصنوعی هستم 🤖")
 
-# هندل پیام‌های متنی
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
+    
+    response = openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": user_message}]
+    )
+    
+    reply = response.choices[0].message.content
+    await update.message.reply_text(reply)
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": user_message}],
-        )
-
-        ai_text = response.choices[0].message.content
-        await update.message.reply_text(ai_text)
-
-    except Exception as e:
-        logger.error(f"OpenAI API error: {e}")
-        await update.message.reply_text("یه مشکلی پیش اومده، دوباره تلاش کن ✨")
-
-# هندل فایل‌ها (اختیاری – اگر بخوای کار کنه)
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file = await update.message.document.get_file()
-    file_path = "temp_file"
-    await file.download_to_drive(file_path)
-
-    kind = filetype.guess(file_path)
-    if kind:
-        await update.message.reply_text(f"نوع فایل شناسایی شد: {kind.mime}")
-    else:
-        await update.message.reply_text("نتونستم نوع فایل رو تشخیص بدم ❌")
-
-# اجرای اصلی
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
 
-    logger.info("Bot started...")
     app.run_polling()
 
 if __name__ == "__main__":
