@@ -12,18 +12,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # -------- ENV --------
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
 
 # آیدی‌های عددی (با -100 شروع می‌شوند)
-SOURCE_CHANNEL_ID = int(os.getenv("CHANNEL_FA", "0"))  # کانال فارسی (سورس)
-EN_CHANNEL_ID     = int(os.getenv("CHANNEL_EN", "0"))  # کانال انگلیسی (مقصد)
-TR_CHANNEL_ID     = int(os.getenv("CHANNEL_TR", "0"))  # کانال ترکی (مقصد)
+SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID", "0"))  # کانال فارسی (سورس)
+EN_CHANNEL_ID     = int(os.getenv("EN_CHANNEL_ID", "0"))      # کانال انگلیسی (مقصد)
+TR_CHANNEL_ID     = int(os.getenv("TR_CHANNEL_ID", "0"))      # کانال ترکی (مقصد)
 
 # OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# -------- Helpers --------
 SYSTEM_PROMPT = (
     "You are a professional translator. Translate the user's Persian text to {lang}.\n"
     "Keep meaning natural and fluent. Preserve emojis, hashtags, URLs and usernames as-is.\n"
@@ -37,10 +36,10 @@ async def translate(text: str, lang: str) -> str:
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role":"system","content": SYSTEM_PROMPT.format(lang=lang)},
-                {"role":"user","content": text}
+                {"role": "system", "content": SYSTEM_PROMPT.format(lang=lang)},
+                {"role": "user", "content": text}
             ],
-            temperature=0.2,
+            temperature=0.2
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
@@ -50,7 +49,7 @@ async def translate(text: str, lang: str) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام 👋 ربات ترجمهٔ خودکار کانال فعاله. فقط توی کانال فارسی پست بزار 👌")
 
-# پست‌های متنی
+# متن‌های کانال فارسی
 async def handle_channel_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.channel_post
     if not msg or msg.chat_id != SOURCE_CHANNEL_ID:
@@ -71,12 +70,13 @@ async def handle_channel_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.exception(f"send text error: {e}")
 
-# پست‌های رسانه‌ای
+# رسانه‌های کانال فارسی (عکس/ویدئو/فایل/گیف/صدا/استیکر) با کپشن
 async def handle_channel_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.channel_post
     if not msg or msg.chat_id != SOURCE_CHANNEL_ID:
         return
 
+    # بررسی وجود رسانه
     has_media = any([
         msg.photo, msg.video, msg.document, msg.animation, msg.audio, msg.voice, msg.sticker
     ])
@@ -114,11 +114,21 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+
+    # فقط پست‌های کانالی را بگیریم
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.TEXT, handle_channel_text))
 
+    # ✅ فیلتر رسانه‌ای درست برای PTB v20.3
     media_filter = (
-        filters.ChatType.CHANNEL &
-        (filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.ANIMATION | filters.AUDIO | filters.VOICE | filters.Sticker.ALL)
+        filters.ChatType.CHANNEL & (
+            filters.PHOTO |
+            filters.VIDEO |
+            filters.Document.ALL |
+            filters.Animation.ALL |
+            filters.AUDIO |
+            filters.VOICE |
+            filters.Sticker.ALL
+        )
     )
     app.add_handler(MessageHandler(media_filter, handle_channel_media))
 
@@ -126,4 +136,4 @@ def main():
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    main()        
+    main() 
