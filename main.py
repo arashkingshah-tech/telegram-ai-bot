@@ -12,15 +12,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # -------- ENV --------
-TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # آیدی‌های عددی (با -100 شروع می‌شوند)
-SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID", "0"))  # کانال فارسی (سورس)
-EN_CHANNEL_ID     = int(os.getenv("EN_CHANNEL_ID", "0"))      # کانال انگلیسی (مقصد)
-TR_CHANNEL_ID     = int(os.getenv("TR_CHANNEL_ID", "0"))      # کانال ترکی (مقصد)
+SOURCE_CHANNEL_ID = int(os.getenv("CHANNEL_FA", "0"))  # کانال فارسی (سورس)
+EN_CHANNEL_ID     = int(os.getenv("CHANNEL_EN", "0"))  # کانال انگلیسی (مقصد)
+TR_CHANNEL_ID     = int(os.getenv("CHANNEL_TR", "0"))  # کانال ترکی (مقصد)
 
-# OpenAI client (نسخه جدید SDK)
+# OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # -------- Helpers --------
@@ -45,12 +45,12 @@ async def translate(text: str, lang: str) -> str:
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         logger.exception(f"OpenAI error: {e}")
-        return text  # در بدترین حالت متن اصلی
+        return text
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام 👋 ربات ترجمهٔ خودکار کانال فعاله. فقط توی کانال فارسی پست بزار 👌")
 
-# پست‌های متنی کانال فارسی
+# پست‌های متنی
 async def handle_channel_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.channel_post
     if not msg or msg.chat_id != SOURCE_CHANNEL_ID:
@@ -63,7 +63,6 @@ async def handle_channel_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     en_text = await translate(src_text, "English")
     tr_text = await translate(src_text, "Turkish")
 
-    # متن ساده را مستقیم به مقاصد بفرست
     try:
         if EN_CHANNEL_ID and en_text:
             await context.bot.send_message(chat_id=EN_CHANNEL_ID, text=en_text)
@@ -72,13 +71,12 @@ async def handle_channel_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.exception(f"send text error: {e}")
 
-# پست‌های رسانه‌ای (عکس/ویدیو/فایل/گیف) با کپشن
+# پست‌های رسانه‌ای
 async def handle_channel_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.channel_post
     if not msg or msg.chat_id != SOURCE_CHANNEL_ID:
         return
 
-    # هر رسانه‌ای به‌جز متن: photo, video, document, animation, audio, voice ...
     has_media = any([
         msg.photo, msg.video, msg.document, msg.animation, msg.audio, msg.voice, msg.sticker
     ])
@@ -91,7 +89,6 @@ async def handle_channel_media(update: Update, context: ContextTypes.DEFAULT_TYP
     en_cap = await translate(caption, "English") if caption else ""
     tr_cap = await translate(caption, "Turkish") if caption else ""
 
-    # برای حفظ خودِ رسانه، از copy_message استفاده می‌کنیم و کپشن ترجمه‌شده را جایگزین می‌کنیم
     try:
         if EN_CHANNEL_ID:
             await context.bot.copy_message(
@@ -110,7 +107,6 @@ async def handle_channel_media(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.exception(f"copy media error: {e}")
 
-# خطاها را لاگ کن تا معلوم شود مشکل کجاست
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("Unhandled exception", exc_info=context.error)
 
@@ -118,11 +114,8 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-
-    # فقط پست‌های کانالی از سورس را بگیریم:
-    # متن
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.TEXT, handle_channel_text))
-    # بقیهٔ رسانه‌ها
+
     media_filter = (
         filters.ChatType.CHANNEL &
         (filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.ANIMATION | filters.AUDIO | filters.VOICE | filters.Sticker.ALL)
@@ -130,8 +123,7 @@ def main():
     app.add_handler(MessageHandler(media_filter, handle_channel_media))
 
     app.add_error_handler(error_handler)
-
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    main()          
+    main()        
